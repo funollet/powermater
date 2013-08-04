@@ -12,74 +12,111 @@ EVENT_LEFT = (2, 7, -1)
 EVENT_RIGHT = (2, 7, 1)
 
 
-class EventMapper:
+# raw_events: up down left rigth
+# events: click more less drag_more drag_less
+
+class Up(object):
+    def __init__(self, mapper):
+        self.mapper = mapper
+
+    def process(self, event):
+        if event[2:] == EVENT_DOWN:
+            self.mapper.state = self.mapper.down
+        elif event[2:] == EVENT_LEFT:
+            self.mapper.send_less()
+        elif event[2:] == EVENT_RIGHT:
+            self.mapper.send_more()
+
+
+class Down(object):
+    def __init__(self, mapper):
+        self.mapper = mapper
+
+    def process(self, event):
+        if event[2:] == EVENT_UP:
+            self.mapper.state = self.mapper.up
+            self.mapper.send_click()
+        elif event[2:] == EVENT_LEFT:
+            self.mapper.state = self.mapper.drag_less
+            self.mapper.send_drag_less()
+        elif event[2:] == EVENT_RIGHT:
+            self.mapper.state = self.mapper.drag_more
+            self.mapper.send_drag_more()
+
+
+class Drag_less(object):
+    def __init__(self, mapper):
+        self.mapper = mapper
+
+    def process(self, event):
+        if event[2:] == EVENT_UP:
+            self.mapper.state = self.mapper.up
+        elif event[2:] == EVENT_LEFT:
+            self.mapper.send_drag_less()
+        elif event[2:] == EVENT_RIGHT:
+            self.mapper.state = self.mapper.drag_more
+            self.mapper.send_drag_more()
+
+
+class Drag_more(object):
+    def __init__(self, mapper):
+        self.mapper = mapper
+
+    def process(self, event):
+        if event[2:] == EVENT_UP:
+            self.mapper.state = self.mapper.up
+        elif event[2:] == EVENT_LEFT:
+            self.mapper.state = self.mapper.drag_less
+            self.mapper.send_drag_less()
+        elif event[2:] == EVENT_RIGHT:
+            self.mapper.send_drag_more()
+
+
+class EventMapper(object):
 
     def __init__(self):
-        self._state = ''
-        self.position = 'up'
+        self.up = Up(self)
+        self.down = Down(self)
+        self.drag_less = Drag_less(self)
+        self.drag_more = Drag_more(self)
+
+        self.state = self.up
 
 
-    def set_state(self, state):
-        if state == 'short_press' and (self._state == 'increment_pressed' \
-                or self._state == 'decrement_pressed'):
-            self._state = state
-            return
-
-        self._state = state
-        getattr(self, 'callback_%s' % state)()  # callback
-
-
-    def act(self, event):
-        """State machine, read events and send callbacks when needed.
-        """
-        if event[2:] == EVENT_DOWN:
-            if self.position == 'up':
-                self.position = 'down'
-        elif event[2:] == EVENT_UP:
-            self.position = 'up'
-            self.set_state('short_press')
-        elif event[2:] == EVENT_RIGHT:
-            if self.position == 'up':
-                self.set_state('increment')
-            else:
-                self.set_state('increment_pressed')
-        elif event[2:] == EVENT_LEFT:
-            if self.position == 'up':
-                self.set_state('decrement')
-            else:
-                self.set_state('decrement_pressed')
-
+    def process(self, event):
+        self.state.process(event)
 
     # Callbacks. Overwrite it with your desired actions.
-    def callback_short_press(self):
+    def send_click(self):
         pass
-    def callback_increment(self):
+    def send_more(self):
         pass
-    def callback_decrement(self):
+    def send_less(self):
         pass
-    def callback_increment_pressed(self):
+    def send_drag_more(self):
         pass
-    def callback_decrement_pressed(self):
+    def send_drag_less(self):
         pass
+
+
 
 
 class EventMapperDebug (EventMapper):
     """Print information about Powermate's events. Mostly useful for debugging.
     """
-
-    def callback_short_press(self):
+    def send_click(self):
         print "button pressed"
 
-    def callback_increment(self):
+    def send_more(self):
         print "rotate +"
 
-    def callback_decrement(self):
+    def send_less(self):
         print "rotate -"
 
-    def callback_increment_pressed(self):
+    def send_drag_more(self):
         print "rotate + pressed"
 
-    def callback_decrement_pressed(self):
+    def send_drag_less(self):
         print "rotate - pressed"
 
 
@@ -102,27 +139,31 @@ class EventMapperClementine (EventMapper):
                 dbus_interface='org.kde.KMix.Control')
 
 
-    def callback_short_press(self):
+    def send_click(self):
         self._clementine.Pause()
 
-    def callback_increment(self):
+    def send_more(self):
         self._kmix.increaseVolume()
 
-    def callback_decrement(self):
+    def send_less(self):
         self._kmix.decreaseVolume()
 
-    def callback_increment_pressed(self):
+    def send_drag_more(self):
         self._clementine.Next()
 
-    def callback_decrement_pressed(self):
+    def send_drag_less(self):
         self._clementine.Prev()
 
 
+def main():
+    pm = powermate.PowerMate("/dev/input/powermate")
+    # actions = EventMapperDebug()
+    actions = EventMapperClementine()
 
+    while 1:
+        actions.process(pm.WaitForEvent(-1))
 
-pm = powermate.PowerMate("/dev/input/powermate")
-# actions = EventMapperDebug()
-actions = EventMapperClementine()
+DEBUG=False
 
-while 1:
-    actions.act(pm.WaitForEvent(-1))
+if __name__ == '__main__':
+    main()
