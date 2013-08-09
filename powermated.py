@@ -5,6 +5,9 @@ import powermate
 import dbus
 
 
+# Hardcoded value. Should be found dynamically.
+DEFAULT_KMIX_OUTPUT_DEVICE = '/Mixers/PulseAudio__Playback_Devices_1/alsa_output_pci_0000_00_1b_0_analog_stereo'
+
 # Codes for USB events read from Powermate HID device.
 EVENT_UP = (1, 256, 0)
 EVENT_DOWN = (1, 256, 1)
@@ -12,8 +15,6 @@ EVENT_LEFT = (2, 7, -1)
 EVENT_RIGHT = (2, 7, 1)
 
 
-# raw_events: up down left rigth
-# events: click more less drag_more drag_less
 
 class Up(object):
     def __init__(self, mapper):
@@ -73,7 +74,11 @@ class Drag_more(object):
 
 
 class EventMapper(object):
+    """A state machine mapping events read from the Powermate HID device
+    into more elaborate events (gestures).
 
+    Inherit the class and overwrite callbacks (methods 'send_*').
+    """
     def __init__(self):
         self.up = Up(self)
         self.down = Down(self)
@@ -87,16 +92,11 @@ class EventMapper(object):
         self.state.process(event)
 
     # Callbacks. Overwrite it with your desired actions.
-    def send_click(self):
-        pass
-    def send_more(self):
-        pass
-    def send_less(self):
-        pass
-    def send_drag_more(self):
-        pass
-    def send_drag_less(self):
-        pass
+    def send_click(self):       pass
+    def send_more(self):        pass
+    def send_less(self):        pass
+    def send_drag_more(self):   pass
+    def send_drag_less(self):   pass
 
 
 
@@ -120,9 +120,11 @@ class EventMapperDebug (EventMapper):
         print "rotate - pressed"
 
 
-
 class EventMapperClementine (EventMapper):
     """Uses Powermate's events to control Clementine + Kmix volume.
+
+    Adding this to ~/.kde/share/config/kmixrc may make smoother volume changes:
+        VolumePercentageStep=1.2
     """
     def __init__(self):
         EventMapper.__init__(self)
@@ -133,8 +135,8 @@ class EventMapperClementine (EventMapper):
         self._clementine = dbus.Interface(_obj_clementine,
                 dbus_interface='org.freedesktop.MediaPlayer')
         # DBus interface to volume controls.
-        _obj_kmix = _bus.get_object('org.kde.kmix',
-                '/Mixers/PulseAudio__Playback_Devices_1/alsa_output_pci_0000_00_1b_0_analog_stereo')
+        _obj_kmix = _bus.get_object('org.kde.kmix', DEFAULT_KMIX_OUTPUT_DEVICE)
+        # TODO: find the real Kmix output device.
         self._kmix = dbus.Interface(_obj_kmix,
                 dbus_interface='org.kde.KMix.Control')
 
@@ -163,7 +165,6 @@ def main():
     while 1:
         actions.process(pm.WaitForEvent(-1))
 
-DEBUG=False
 
 if __name__ == '__main__':
     main()
