@@ -3,16 +3,30 @@
 
 import powermate
 import dbus
+import time
 
 
 # Hardcoded value. Should be found dynamically.
 DEFAULT_KMIX_OUTPUT_DEVICE = '/Mixers/PulseAudio__Playback_Devices_1/alsa_output_pci_0000_00_1b_0_analog_stereo'
+MIN_EVENT_INTERVAL = 0.5
+
 
 # Codes for USB events read from Powermate HID device.
 EVENT_UP = (1, 256, 0)
 EVENT_DOWN = (1, 256, 1)
 EVENT_LEFT = (2, 7, -1)
 EVENT_RIGHT = (2, 7, 1)
+
+
+class Timer(object):
+    def __init__(self):
+        self.last = 0
+
+    def reset(self):
+        self.last = time.time()
+
+    def period(self):
+        return time.time() - self.last
 
 
 
@@ -140,6 +154,11 @@ class EventMapperClementine (EventMapper):
         self._kmix = dbus.Interface(_obj_kmix,
                 dbus_interface='org.kde.KMix.Control')
 
+        self.last_drag_more = Timer()
+        self.last_drag_more.reset()
+        self.last_drag_less = Timer()
+        self.last_drag_less.reset()
+
 
     def send_click(self):
         self._clementine.Pause()
@@ -151,10 +170,14 @@ class EventMapperClementine (EventMapper):
         self._kmix.decreaseVolume()
 
     def send_drag_more(self):
-        self._clementine.Next()
+        if self.last_drag_more.period() > MIN_EVENT_INTERVAL:
+            self._clementine.Next()
+            self.last_drag_more.reset()
 
     def send_drag_less(self):
-        self._clementine.Prev()
+        if self.last_drag_less.period() > MIN_EVENT_INTERVAL:
+            self._clementine.Prev()
+            self.last_drag_less.reset()
 
 
 def main():
